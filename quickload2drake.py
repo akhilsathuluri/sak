@@ -79,6 +79,46 @@ def compute_walking_pose(meshcat):
     parser.package_map().Add(package_name.split('/')[0], abs_path+ '/' + package_name)
     model = parser.AddModels(temp_urdf.name)[0]
 
+    # Add feet contact visual and collision model
+    xMinMax = [-0.11, 0.04]
+    yMinMax = [-0.04,0.04]
+
+    plant.RegisterVisualGeometry(
+            plant.GetBodyByName('foot_l'),
+            RigidTransform(np.array([0.07,0,0])),
+            Box(1e-3,yMinMax[1]-yMinMax[0], xMinMax[1]-xMinMax[0]),
+            "l_sole_collision",
+            np.array([1.0,1.0,1.0,1]))
+    plant.RegisterVisualGeometry(
+            plant.GetBodyByName('foot_r'),
+            RigidTransform(np.array([0.07,0,0])),
+            Box(1e-3,yMinMax[1]-yMinMax[0], xMinMax[1]-xMinMax[0]),
+            "r_sole_collision",
+            np.array([1.0,1.0,1.0,1]))
+
+    # add the feet hydroelastic model boxes
+    proximity_properties = ProximityProperties()
+    AddContactMaterial(
+        1e4, 1e7, CoulombFriction(
+            static_friction = 1.0,
+            dynamic_friction = 1.0), proximity_properties
+    )
+    AddCompliantHydroelasticProperties(0.01, 1e8, proximity_properties)
+
+    plant.RegisterCollisionGeometry(
+            plant.GetBodyByName('foot_l'),
+            RigidTransform(np.array([0.07,0,0])),
+            Box(1e-3,yMinMax[1]-yMinMax[0], xMinMax[1]-xMinMax[0]),
+            "l_sole_collision",
+            proximity_properties)
+    plant.RegisterCollisionGeometry(
+            plant.GetBodyByName('foot_r'),
+            RigidTransform(np.array([0.07,0,0])),
+            Box(1e-3,yMinMax[1]-yMinMax[0], xMinMax[1]-xMinMax[0]),
+            "l_sole_collision",
+            proximity_properties)
+
+
     plant.Finalize()
     MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
     meshcat.Delete()
@@ -86,8 +126,6 @@ def compute_walking_pose(meshcat):
     body_indices = plant.GetBodyIndices(model)
     for bi in body_indices:
         AddFrameTriadIllustration(scene_graph=scene_graph, body=plant.get_body(bi))
-
-
     diagram = builder.Build()
     diagram_context = diagram.CreateDefaultContext()
     plant_context = plant.GetMyContextFromRoot(diagram_context)
@@ -96,8 +134,7 @@ def compute_walking_pose(meshcat):
     foot_r_frame = plant.GetBodyByName("foot_r").body_frame()
     base_link_frame = plant.GetBodyByName("base_link").body_frame()
     foot_orientation = RotationMatrix.MakeYRotation(-np.pi/2).multiply(RotationMatrix.MakeZRotation(np.pi))
-    # foot_orientation = RotationMatrix.MakeZRotation(-np.pi).multiply(RotationMatrix.MakeYRotation(np.pi/2))
-
+    
     ik = InverseKinematics(plant, plant_context)
     ik.AddPositionConstraint(
                 foot_l_frame,
@@ -165,9 +202,11 @@ def compute_walking_pose(meshcat):
 
 # Call the function with the 'plant' object
 result = compute_walking_pose(meshcat)
-# %%
+# 
 # computed walking pose:
 # array([ 7.07132374e-01, -3.52998388e-06,  7.07081187e-01, -2.60464555e-05,
     #    -1.50000000e-01,  1.65057030e-01,  5.00000000e-01, -1.31351885e-04,
     #     5.23850595e-01, -1.56995529e+00,  1.04103461e+00, -7.23781492e-03,
     #     5.25645822e-01, -1.58187524e+00,  1.04416407e+00])
+
+# %%
