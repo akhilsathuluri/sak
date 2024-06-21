@@ -1,11 +1,18 @@
 # %%
 
 import numpy as np
-import matplotlib.pyplot as plt
-from urdf2drake import URDFutils
+
+# import matplotlib.pyplot as plt
+# from urdf2drake import URDFutils
 from pathlib import Path
 
-from pydrake.all import *
+import pydrake.multibody.plant as pmp
+from pydrake.systems.framework import DiagramBuilder
+from pydrake.multibody.parsing import Parser
+from pydrake.geometry import Box, MeshcatVisualizer, Sphere
+from pydrake.multibody.meshcat import JointSliders
+
+# from pydrake.all import *
 
 # import casadi as cs
 
@@ -34,18 +41,21 @@ from pydrake.all import *
 def robot_joint_teleop(meshcat, package_path, package_name, temp_urdf, init_pose):
     builder = DiagramBuilder()
     time_step = 0
-    plant, scene_graph = AddMultibodyPlantSceneGraph(builder, time_step=time_step)
+    plant, scene_graph = pmp.AddMultibodyPlantSceneGraph(builder, time_step=time_step)
     parser = Parser(plant, scene_graph)
     abs_path = Path(package_path).resolve().__str__()
-    parser.package_map().Add(package_name.split("/")[0], abs_path + "/" + package_name)
+    print(abs_path)
+    # parser.package_map().Add(package_name.split("/")[0], abs_path + "/" + package_name)
+    parser.package_map().Add("meshes", abs_path + "/" + package_name + "meshes/")
+    print(package_name.split("/")[0])
     model = parser.AddModels(temp_urdf.name)[0]
 
-    body_indices = plant.GetBodyIndices(model)
-    for bi in body_indices:
-        AddFrameTriadIllustration(scene_graph=scene_graph, body=plant.get_body(bi))
+    # body_indices = plant.GetBodyIndices(model)
+    # for bi in body_indices:
+    #     AddFrameTriadIllustration(scene_graph=scene_graph, body=plant.get_body(bi))
 
     plant.Finalize()
-    visualizer = MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+    MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
 
     # reset meshcat for each run
     meshcat.Delete()
