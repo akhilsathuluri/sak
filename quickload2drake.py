@@ -11,6 +11,15 @@ from pydrake.systems.framework import DiagramBuilder
 from pydrake.multibody.parsing import Parser
 from pydrake.geometry import Box, MeshcatVisualizer, Sphere
 from pydrake.multibody.meshcat import JointSliders
+from pydrake.geometry import HalfSpace, ProximityProperties
+from pydrake.math import RigidTransform
+from pydrake.multibody.plant import CoulombFriction
+from pydrake.geometry import (
+    AddCompliantHydroelasticProperties,
+    AddContactMaterial,
+    AddRigidHydroelasticProperties,
+)
+
 
 # from pydrake.all import *
 
@@ -38,34 +47,41 @@ from pydrake.multibody.meshcat import JointSliders
 # DIRECT JOINT TELEOP
 # -----------------------
 # Slider teleop for the robot
-def robot_joint_teleop(meshcat, package_path, package_name, temp_urdf, init_pose):
+def robot_joint_teleop(
+    meshcat,
+    package_path,
+    package_name,
+    temp_urdf,
+    # init_pose,
+    time_step=1e-3,
+    fixed_base=False,
+):
     builder = DiagramBuilder()
-    time_step = 0
     plant, scene_graph = pmp.AddMultibodyPlantSceneGraph(builder, time_step=time_step)
     parser = Parser(plant, scene_graph)
     abs_path = Path(package_path).resolve().__str__()
-    print(abs_path)
-    # parser.package_map().Add(package_name.split("/")[0], abs_path + "/" + package_name)
+    # # parser.package_map().Add(package_name.split("/")[0], abs_path + "/" + package_name)
     parser.package_map().Add("meshes", abs_path + "/" + package_name + "meshes/")
     print(package_name.split("/")[0])
     model = parser.AddModels(temp_urdf.name)[0]
 
-    # body_indices = plant.GetBodyIndices(model)
-    # for bi in body_indices:
-    #     AddFrameTriadIllustration(scene_graph=scene_graph, body=plant.get_body(bi))
-
-    plant.Finalize()
-    MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+    # if fixed_base:
+    #     plant.WeldFrames(
+    #         plant.world_frame(),
+    #         plant.get_body(plant.GetBodyIndices(model)[0]).body_frame(),
+    #     )
 
     # reset meshcat for each run
     meshcat.Delete()
     meshcat.DeleteAddedControls()
 
-    sliders = builder.AddSystem(JointSliders(meshcat, plant, initial_value=init_pose))
+    plant.Finalize()
+    MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+
+    sliders = builder.AddSystem(JointSliders(meshcat, plant))
     diagram = builder.Build()
 
     sliders.Run(diagram)
-    meshcat.DeleteAddedControls()
 
 
 # %%
@@ -165,5 +181,34 @@ def compute_walking_pose(
     # return result
     return result.GetSolution()
 
+    # %%
 
-# %%
+
+def add_ground_with_friction(plant):
+    surface_friction_ground = CoulombFriction(static_friction=1.0, dynamic_friction=1.0)
+    proximity_properties_ground = ProximityProperties()
+    # https://drake.mit.edu/pydrake/pydrake.geometry.html?highlight=addcontactmaterial#pydrake.geometry.AddContactMaterial
+    AddContactMaterial(
+        dissipation=1e4,
+        point_stiffness=1e7,
+        friction=surface_friction_ground,
+        properties=proximity_properties_ground,
+    )
+    AddRigidHydroelasticProperties(0.01, proximity_properties_ground)
+
+    plant.RegisterCollisionGeometry(
+        plant.world_body(),
+        RigidTransform(),
+        HalfSpace(),
+        "ground_collision",
+        proximity_properties_ground,
+    )
+    # plant.RegisterVisualGeometry(
+    #     plant.world_body(),
+    #     RigidTransform(),
+    #     HalfSpace(),
+    #     "ground_visual",
+    #     np.array(
+    #         [0.5, 0.5, 0.5, 0.0]
+    #     ),  # modify to set the RGBA color of the ground plane
+    # )
