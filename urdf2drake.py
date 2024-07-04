@@ -43,7 +43,10 @@ class URDFutils:
                         f"Meshes with unequal scale will be set to the min scale! {min(scale)}",
                     )
             child_mesh_path = (
-                self.package_path + self.package_name + path.split("package://")[1]
+                # depends on how the urdf is generated with or without package_name included
+                # self.package_path + self.package_name + path.split("package://")[1]
+                self.package_path
+                + path.split("package://")[1]
             )
             print(child_mesh_path)
             child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
@@ -58,7 +61,10 @@ class URDFutils:
         for child in tqdm(self.root.findall("./link/collision/geometry/mesh")):
             path = child.attrib["filename"]
             child_mesh_path = (
-                self.package_path + self.package_name + path.split("package://")[1]
+                # depends on how the urdf is generated with or without package_name included
+                # self.package_path + self.package_name + path.split("package://")[1]
+                self.package_path
+                + path.split("package://")[1]
             )
             child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
             if not Path(child_mesh_name).is_file():
@@ -113,8 +119,8 @@ class URDFutils:
             print(self.robot_odio, file=f)
         return file_name
 
-    def get_modified_urdf(self, add_drake_tags=True, link_list=[]):
-        self.urdf2drake()
+    def get_modified_urdf(self, add_drake_tags=True, mesh_format=".stl", link_list=[]):
+        self.urdf2drake(in_mesh_format=mesh_format)
         self.remove_collisions_except(link_list)
 
         odio_robot = xml_to_odio(self.root)
