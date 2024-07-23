@@ -6,13 +6,17 @@ from pathlib import Path
 import tempfile
 from amo_urdf import *
 from urchin import URDF
+from urchin import Box as uBox
+from urchin import Cylinder as uCylinder
+from urchin import Geometry as uGeometry
+import trimesh
+import numpy as np
+from copy import copy as pycopy
 
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.CRITICAL)
-
-# %%
+logger.setLevel(logging.DEBUG)
 
 
 class URDFutils:
@@ -44,77 +48,45 @@ class URDFutils:
         self.package_name = package_name
         tree = ET.parse(self.urdf_path)
         self.root = tree.getroot()
-        self.robot_urchin = URDF.load(self.urdf_path, lazy_load_meshes=True)
         logger.debug("Loaded the URDF file")
 
     def modify_meshes(self, in_mesh_format=".stl", out_mesh_format=".obj"):
-        for link in tqdm(self.robot_urchin.links):
-            logger.debug("Converting all the visual meshes from .stl to .obj")
-            for vis in link.visuals:
-                path = vis.geometry.mesh.filename
-                child_mesh_path = self.package_path + path.split("package://")[1]
-                child_mesh_name = child_mesh_path.replace(
-                    in_mesh_format, out_mesh_format
-                )
-                if not Path(child_mesh_name).is_file():
-                    temp_mesh = meshio.read(child_mesh_path)
-                    temp_mesh.write(child_mesh_name)
+        for child in tqdm(self.root.findall("./link/visual/geometry/mesh")):
+            path = child.attrib["filename"]
+            if "scale" in child.attrib:
+                scale = child.attrib["scale"]
+                scale = [float(x) for x in scale.split()]
+                if all(x == scale[0] for x in scale):
+                    pass
                 else:
-                    logger.warning(f"Mesh file already exists at {child_mesh_name}")
-                vis.geometry.mesh.filename = path.replace(
-                    in_mesh_format, out_mesh_format
-                )
-            logger.debug("Converting all the collision meshes from .stl to .obj")
-            for col in link.collisions:
-                path = col.geometry.mesh.filename
-                child_mesh_path = self.package_path + path.split("package://")[1]
-                child_mesh_name = child_mesh_path.replace(
-                    in_mesh_format, out_mesh_format
-                )
-                if not Path(child_mesh_name).is_file():
-                    temp_mesh = meshio.read(child_mesh_path)
-                    temp_mesh.write(child_mesh_name)
-                col.geometry.mesh.filename = path.replace(
-                    in_mesh_format, out_mesh_format
-                )
-            # for child in tqdm(self.root.findall("./link/visual/geometry/mesh")):
-            #     path = child.attrib["filename"]
-            #     if "scale" in child.attrib:
-            #         scale = child.attrib["scale"]
-            #         scale = [float(x) for x in scale.split()]
-            #         if all(x == scale[0] for x in scale):
-            #             pass
-            #         else:
-            #             child.attrib["scale"] = " ".join([str(min([0.1, 0.2, 0.3]))] * 3)
-            #             str([min(scale)] * 3)
-            #             logger.warning(
-            #                 f"Meshes with unequal scale will be set to the min scale! {min(scale)}",
-            #             )
-            #     child_mesh_path = self.package_path + path.split("package://")[1]
-            #     print(child_mesh_path)
-            #     child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
-            #     if not Path(child_mesh_name).is_file():
-            #         temp_mesh = meshio.read(child_mesh_path)
-            #         temp_mesh.write(child_mesh_name)
-            #     else:
-            #         logger.warning(f"Mesh file already exists at {child_mesh_name}")
-            #     child.set("filename", path.replace(in_mesh_format, out_mesh_format))
-            self.robot_amo = eval(xml_to_amo(self.root))
+                    child.attrib["scale"] = " ".join([str(min([0.1, 0.2, 0.3]))] * 3)
+                    str([min(scale)] * 3)
+                    logging.warning(
+                        f"Meshes with unequal scale will be set to the min scale! {min(scale)}",
+                    )
+            child_mesh_path = self.package_path + path.split("package://")[1]
+            print(child_mesh_path)
+            child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
+            if not Path(child_mesh_name).is_file():
+                temp_mesh = meshio.read(child_mesh_path)
+                temp_mesh.write(child_mesh_name)
+            else:
+                logging.warning(f"Mesh file already exists at {child_mesh_name}")
+            child.set("filename", path.replace(in_mesh_format, out_mesh_format))
 
-        # logger.debug("Converting all the collision meshes from .stl to .obj")
-        # for child in tqdm(self.root.findall("./link/collision/geometry/mesh")):
-        #     path = child.attrib["filename"]
-        #     child_mesh_path = self.package_path + path.split("package://")[1]
-        #     child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
-        #     if not Path(child_mesh_name).is_file():
-        #         temp_mesh = meshio.read(child_mesh_path)
-        #         temp_mesh.write(child_mesh_name)
-        #     child.set("filename", path.replace(in_mesh_format, out_mesh_format))
+        print("Converting all the visual meshes from .stl to .obj")
+        for child in tqdm(self.root.findall("./link/collision/geometry/mesh")):
+            path = child.attrib["filename"]
+            child_mesh_path = self.package_path + path.split("package://")[1]
+            child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
+            if not Path(child_mesh_name).is_file():
+                temp_mesh = meshio.read(child_mesh_path)
+                temp_mesh.write(child_mesh_name)
+            child.set("filename", path.replace(in_mesh_format, out_mesh_format))
+
+        self.robot_amo = eval(xml_to_amo(self.root))
 
     def remove_collisions_except(self, link_list):
-        for link in self.robot_urchin.links:
-            if link.name not in link_list:
-                link.collisions = []
         for link in self.root.findall("./link"):
             if link.attrib["name"] not in link_list:
                 for col in link.findall("./collision"):
@@ -160,6 +132,71 @@ class URDFutils:
         self.robot_amo[0][0][0].xyz = "0 0 0"
         self.robot_amo[0][1][0].xyz = "0 0 0"
 
+    # isolated feature for now
+    def simplify_meshes_except(self, urdf_path):
+        # TODO: Currently has tangled dependencies and needs to be resolved
+        robot = URDF.load(urdf_path, lazy_load_meshes=True)
+        prev_transform = np.eye(4)
+        for ii in tqdm(range(len(robot.links))):
+            mesh_path = (
+                self.package_path
+                + robot.links[ii]
+                .visuals[0]
+                .geometry.mesh.filename.split("package://")[1]
+            )
+            mesh = trimesh.load(mesh_path)
+            bbox = mesh.bounding_primitive
+            temp_transform = np.eye(4)
+            temp_transform[0:3, 0:3] = pycopy(bbox.primitive.transform[0:3, 0:3])
+            if isinstance(bbox, trimesh.primitives.Box):
+                robot.links[ii].visuals[0].geometry = uGeometry(
+                    box=uBox(
+                        size=bbox.primitive.extents / 1000.0,
+                    )
+                )
+                if len(robot.links[ii].collisions) > 0:
+                    robot.links[ii].collisions[0].geometry = uGeometry(
+                        box=uBox(
+                            size=bbox.primitive.extents / 1000.0,
+                        )
+                    )
+            elif isinstance(bbox, trimesh.primitives.Cylinder):
+                robot.links[ii].visuals[0].geometry = uGeometry(
+                    cylinder=uCylinder(
+                        radius=bbox.primitive.radius / 1000.0,
+                        length=bbox.primitive.height / 1000.0,
+                    )
+                )
+                if len(robot.links[ii].collisions) > 0:
+                    robot.links[ii].collisions[0].geometry = uGeometry(
+                        cylinder=uCylinder(
+                            radius=bbox.primitive.radius / 1000.0,
+                            length=bbox.primitive.height / 1000.0,
+                        )
+                    )
+            # try:
+            if ii != len(robot.joints) and robot.joints[ii].joint_type == "fixed":
+                temp_transform[:3, 3] = (
+                    bbox.primitive.transform[:3, 3] / 1000.0 - prev_transform[:3, 3]
+                )
+            if ii == len(robot.joints) - 2:
+                temp_transform[:3, 3] = (
+                    bbox.primitive.transform[:3, 3] / 1000.0 - prev_transform[:3, 3]
+                )
+            # except:
+            #     pass
+            robot.links[ii].visuals[0].origin = pycopy(temp_transform)
+            robot.links[ii].inertial.origin = pycopy(temp_transform)
+            if len(robot.links[ii].collisions) > 0:
+                robot.links[ii].collisions[0].origin = pycopy(temp_transform)
+
+            temp_transform[:3, 3] = pycopy(bbox.primitive.transform[:3, 3] / 1000.0)
+            prev_transform = pycopy(temp_transform)
+
+            urdf_path = urdf_path.replace(".urdf", "_simplified.urdf")
+            # robot.save(urdf_path)
+            return urdf_path
+
     def get_modified_urdf(self):
         urdf_string = self.robot_amo
         path_temp_urdf = tempfile.NamedTemporaryFile(mode="w+", suffix=".urdf")
@@ -171,10 +208,6 @@ class URDFutils:
         with open(temp_urdf.name, "r") as f:
             print(f.read())
 
-    def simplify_meshes_except(self, link_list):
-
-        pass
-
     def add_flat_feet(self):
         pass
 
@@ -183,21 +216,35 @@ class URDFutils:
 
 
 # %%
-# # Example usage
-# package_path = "./robot_descriptions/"
+
+# # # Example usage
+# package_path = "../robot_descriptions/"
 # package_name = "flamingo-testbench/"
 # urdf_name = "flamingo-testbench.urdf"
 
 # urdf_utils = URDFutils(package_path, package_name, urdf_name)
 # # first convert the urdf meshes to drake compatible format
 # urdf_utils.modify_meshes(in_mesh_format=".STL", out_mesh_format=".obj")
-# # now remove all collisions
+# # simplify meshes
+# # urdf_utils.simplify_meshes_except([])
+# # # now remove all collisions
 # urdf_utils.remove_collisions_except([])
-# # add joint limits
+# # # add joint limits
 # urdf_utils.add_joint_limits()
-# # add transmission tags
+# # # add transmission tags
 # urdf_utils.add_actuation_tags()
-# # get the urdf out
+# # # get the urdf out
 # urdf_string, temp_urdf = urdf_utils.get_modified_urdf()
-# # display URDF
+# # # display URDF
 # urdf_utils.show_temp_urdf(temp_urdf)
+
+# # %%
+
+# robot = URDF.load(temp_urdf.name, lazy_load_meshes=True)
+# robot.links[0].visuals[0].geometry
+
+# # TODO: Does not work currently
+# urdf_utils.simplify_meshes_except(temp_urdf.name)
+
+
+# %%
