@@ -5,7 +5,7 @@ import numpy as np
 # import matplotlib.pyplot as plt
 # from urdf2drake import URDFutils
 from pathlib import Path
-
+from pydrake.multibody.tree import PrismaticJoint_
 import pydrake.multibody.plant as pmp
 from pydrake.systems.framework import DiagramBuilder
 from pydrake.multibody.parsing import Parser
@@ -67,11 +67,11 @@ def robot_joint_teleop(
     print(package_name.split("/")[0])
     model = parser.AddModels(temp_urdf.name)[0]
 
-    # if fixed_base:
-    #     plant.WeldFrames(
-    #         plant.world_frame(),
-    #         plant.get_body(plant.GetBodyIndices(model)[0]).body_frame(),
-    #     )
+    if fixed_base:
+        plant.WeldFrames(
+            plant.world_frame(),
+            plant.get_body(plant.GetBodyIndices(model)[0]).body_frame(),
+        )
 
     # reset meshcat for each run
     meshcat.Delete()
