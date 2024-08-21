@@ -12,6 +12,7 @@ from urchin import Geometry as uGeometry
 import trimesh
 import numpy as np
 from copy import copy as pycopy
+import contextlib
 
 import logging
 
@@ -48,10 +49,11 @@ class URDFutils:
         self.package_name = package_name
         tree = ET.parse(self.urdf_path)
         self.root = tree.getroot()
-        logger.debug("Loaded the URDF file")
+        # logger.debug("Loaded the URDF file")
 
     def modify_meshes(self, in_mesh_format=".stl", out_mesh_format=".obj"):
-        for child in tqdm(self.root.findall("./link/visual/geometry/mesh")):
+        # for child in tqdm(self.root.findall("./link/visual/geometry/mesh")):
+        for child in self.root.findall("./link/visual/geometry/mesh"):
             path = child.attrib["filename"]
             if "scale" in child.attrib:
                 scale = child.attrib["scale"]
@@ -65,17 +67,18 @@ class URDFutils:
                         f"Meshes with unequal scale will be set to the min scale! {min(scale)}",
                     )
             child_mesh_path = self.package_path + path.split("package://")[1]
-            print(child_mesh_path)
+            logging.info(child_mesh_path)
             child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
             if not Path(child_mesh_name).is_file():
                 temp_mesh = meshio.read(child_mesh_path)
                 temp_mesh.write(child_mesh_name)
             else:
-                logging.warning(f"Mesh file already exists at {child_mesh_name}")
+                logging.info(f"Mesh file already exists at {child_mesh_name}")
             child.set("filename", path.replace(in_mesh_format, out_mesh_format))
 
-        print("Converting all the visual meshes from .stl to .obj")
-        for child in tqdm(self.root.findall("./link/collision/geometry/mesh")):
+        logging.info("Converting all the visual meshes from .stl to .obj")
+        # for child in tqdm(self.root.findall("./link/collision/geometry/mesh")):
+        for child in self.root.findall("./link/collision/geometry/mesh"):
             path = child.attrib["filename"]
             child_mesh_path = self.package_path + path.split("package://")[1]
             child_mesh_name = child_mesh_path.replace(in_mesh_format, out_mesh_format)
