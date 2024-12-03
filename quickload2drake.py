@@ -22,6 +22,7 @@ from pydrake.geometry import (
 from pydrake.multibody.inverse_kinematics import InverseKinematics
 from pydrake.solvers import Solve
 from pydrake.visualization import AddFrameTriadIllustration
+from pydrake.visualization import AddDefaultVisualization
 
 # from pydrake.all import *
 
@@ -57,6 +58,7 @@ def robot_joint_teleop(
     # init_pose,
     time_step=1e-3,
     fixed_base=False,
+    visualiser="default",
 ):
     builder = DiagramBuilder()
     plant, scene_graph = pmp.AddMultibodyPlantSceneGraph(builder, time_step=time_step)
@@ -73,12 +75,17 @@ def robot_joint_teleop(
             plant.get_body(plant.GetBodyIndices(model)[0]).body_frame(),
         )
 
+    plant.Finalize()
     # reset meshcat for each run
     meshcat.Delete()
     meshcat.DeleteAddedControls()
-
-    plant.Finalize()
-    MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+    
+    if visualiser == "default":    
+        MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+    elif visualiser == "stream":
+        AddDefaultVisualization(builder=builder, meshcat=meshcat)
+    else:
+        raise ValueError("Invalid visualiser option. Choose 'default' or 'stream'.")
 
     body_indices = plant.GetBodyIndices(model)
     for bi in body_indices:
