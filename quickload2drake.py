@@ -79,17 +79,17 @@ def robot_joint_teleop(
     # reset meshcat for each run
     meshcat.Delete()
     meshcat.DeleteAddedControls()
-    
-    if visualiser == "default":    
+
+    if visualiser == "default":
         MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
     elif visualiser == "stream":
         AddDefaultVisualization(builder=builder, meshcat=meshcat)
     else:
         raise ValueError("Invalid visualiser option. Choose 'default' or 'stream'.")
 
-    body_indices = plant.GetBodyIndices(model)
-    for bi in body_indices:
-        AddFrameTriadIllustration(scene_graph=scene_graph, body=plant.get_body(bi))
+    # body_indices = plant.GetBodyIndices(model)
+    # for bi in body_indices:
+    #     AddFrameTriadIllustration(scene_graph=scene_graph, body=plant.get_body(bi))
 
     sliders = builder.AddSystem(JointSliders(meshcat, plant))
     diagram = builder.Build()
