@@ -234,12 +234,12 @@ def compute_walking_pose(
 
 
 def add_ground_with_friction(plant):
-    surface_friction_ground = CoulombFriction(static_friction=1.0, dynamic_friction=1.0)
+    surface_friction_ground = CoulombFriction(static_friction=0.5, dynamic_friction=0.5)
     proximity_properties_ground = ProximityProperties()
     # https://drake.mit.edu/pydrake/pydrake.geometry.html?highlight=addcontactmaterial#pydrake.geometry.AddContactMaterial
     AddContactMaterial(
-        dissipation=1e4,
-        point_stiffness=1e7,
+        #     dissipation=1e4,
+        #     point_stiffness=1e7,
         friction=surface_friction_ground,
         properties=proximity_properties_ground,
     )
