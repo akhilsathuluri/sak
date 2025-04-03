@@ -107,7 +107,7 @@ class URDFutils:
         joint_names = []
         for j in joints:
             # TODO: Handle prismatic passive/active joints
-            if j.attrib["type"] == "revolute":
+            if j.attrib["type"] == "revolute" or j.attrib["type"] == "prismatic":
                 joint_names.append([j.attrib["name"], j.attrib["type"]])
 
         for j in joint_names:
