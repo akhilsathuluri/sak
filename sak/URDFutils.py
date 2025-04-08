@@ -101,6 +101,7 @@ class URDFutils:
         for j in joints:
             if j.attrib["name"] not in joint_list:
                 j.attrib["type"] = "fixed"
+        self.robot_amo = eval(xml_to_amo(self.root))
 
     def add_actuation_tags(self):
         joints = self.root.findall("./joint")
