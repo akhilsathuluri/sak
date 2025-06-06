@@ -125,11 +125,14 @@ class URDFutils:
     def add_joint_limits(self):
         joints = self.root.findall("./joint")
         for j in joints:
-            limit = j.find("./limit")
-            limit.set("effort", "1000")
-            limit.set("velocity", "100")
-            limit.set("lower", "-3.14")
-            limit.set("upper", "3.14")
+            try:
+                limit = j.find("./limit")
+                limit.set("effort", "1000")
+                limit.set("velocity", "100")
+                limit.set("lower", "-3.14")
+                limit.set("upper", "3.14")
+            except AttributeError:
+                pass
         self.robot_amo = eval(xml_to_amo(self.root))
 
     def move_base_to_origin(self):
