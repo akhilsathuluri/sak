@@ -10,7 +10,11 @@ import pydrake.multibody.plant as pmp
 from pydrake.systems.framework import DiagramBuilder
 from pydrake.multibody.parsing import Parser
 from pydrake.geometry import Box, MeshcatVisualizer, Sphere
-from pydrake.multibody.meshcat import JointSliders
+from pydrake.multibody.meshcat import (
+    JointSliders,
+    ContactVisualizer,
+    ContactVisualizerParams,
+)
 from pydrake.geometry import HalfSpace, ProximityProperties
 from pydrake.math import RigidTransform, RotationMatrix
 from pydrake.multibody.plant import CoulombFriction
@@ -54,7 +58,7 @@ def robot_joint_teleop(
     meshcat,
     package_path,
     package_name,
-    temp_urdf,
+    urdf_path,
     # init_pose,
     time_step=1e-3,
     fixed_base=False,
@@ -67,7 +71,8 @@ def robot_joint_teleop(
     parser.package_map().Add(package_name.split("/")[0], abs_path + "/" + package_name)
     # parser.package_map().Add("meshes", abs_path + "/" + package_name + "meshes/")
     print(package_name.split("/")[0])
-    model = parser.AddModels(temp_urdf.name)[0]
+
+    model = parser.AddModels(urdf_path)[0]
 
     if fixed_base:
         plant.WeldFrames(
@@ -82,6 +87,12 @@ def robot_joint_teleop(
 
     if visualiser == "default":
         MeshcatVisualizer.AddToBuilder(builder, scene_graph, meshcat)
+        ContactVisualizer.AddToBuilder(
+            builder,
+            plant,
+            meshcat,
+            ContactVisualizerParams(newtons_per_meter=1e3, newton_meters_per_meter=1e1),
+        )
     elif visualiser == "stream":
         AddDefaultVisualization(builder=builder, meshcat=meshcat)
     else:

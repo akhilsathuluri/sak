@@ -221,6 +221,184 @@ class URDFutils:
     def add_foot_point_contacts(self):
         pass
 
+    def add_convex_collisions(
+        self, link_list=None, collision_type="capsule", scale_factor=1.1
+    ):
+        """Add convex collision geometries to links without existing collisions.
+
+        For links that already have collision geometries, they are left
+        unchanged. For links without collision geometries, creates new convex
+        collision shapes based on their visual meshes to improve collision
+        detection performance.
+
+        Args:
+            link_list (list, optional): List of link names to process. If None,
+                all links are processed.
+            collision_type (str): Type of collision shape to use. Options:
+                - 'box': Use bounding box
+                - 'sphere': Use bounding sphere
+                - 'capsule': Use bounding capsule (cylinder)
+                - 'auto': Automatically choose based on mesh geometry
+            scale_factor (float): Factor to scale the bounding primitive
+                (default 1.1 for 10% padding)
+        """
+        logging.info(f"Replacing collision meshes with {collision_type} " f"primitives")
+
+        for link in self.root.findall("./link"):
+            link_name = link.attrib["name"]
+
+            # Skip links not in the specified list
+            if link_list is not None and link_name not in link_list:
+                continue
+
+            # Check if collision already exists
+            existing_collisions = link.findall("./collision")
+            if existing_collisions:
+                logging.info(
+                    f"Link {link_name} already has collision " f"geometry, skipping"
+                )
+                continue
+
+            # No collision exists, use visual mesh to create collision
+            visual_meshes = link.findall("./visual/geometry/mesh")
+            if not visual_meshes:
+                logging.info(f"No visual mesh found for link {link_name}, " f"skipping")
+                continue
+
+            # Use the first visual mesh as reference
+            visual_mesh_elem = visual_meshes[0]
+            try:
+                # Get mesh path and load mesh
+                mesh_path = visual_mesh_elem.attrib["filename"]
+                if mesh_path.startswith("package://"):
+                    full_mesh_path = (
+                        self.package_path + mesh_path.split("package://")[1]
+                    )
+                else:
+                    full_mesh_path = self.package_path + mesh_path
+
+                if not Path(full_mesh_path).is_file():
+                    logging.warning(f"Visual mesh file not found: " f"{full_mesh_path}")
+                    continue
+
+                # Load mesh using trimesh
+                mesh = trimesh.load(full_mesh_path)
+
+                # Determine collision type
+                chosen_type = self._determine_collision_type(mesh, collision_type)
+
+                # Create new collision geometry element
+                new_geometry = self._create_collision_geometry(
+                    mesh, chosen_type, scale_factor
+                )
+
+                # Create new collision element
+                collision_elem = ET.SubElement(link, "collision")
+                collision_elem.set("name", f"{link_name}_collision")
+
+                # Add geometry to collision
+                geometry_elem = ET.SubElement(collision_elem, "geometry")
+                geometry_elem.append(new_geometry)
+
+                # Copy origin from visual if it exists
+                visual_elem = link.find("./visual")
+                if visual_elem is not None:
+                    visual_origin = visual_elem.find("./origin")
+                    if visual_origin is not None:
+                        collision_origin = ET.SubElement(collision_elem, "origin")
+                        for attr_name, attr_value in visual_origin.attrib.items():
+                            collision_origin.set(attr_name, attr_value)
+
+                logging.info(
+                    f"Created {chosen_type} collision for link "
+                    f"{link_name} based on visual mesh"
+                )
+
+            # except (OSError, IOError, ValueError) as e:
+            #     logging.error(
+            #         f"Failed to process visual mesh for link {link_name}: {str(e)}"
+            #     )
+            #     continue
+            except Exception as e:
+                logging.error(
+                    f"Error processing visual mesh for link {link_name}: {str(e)}"
+                )
+                continue
+
+        self.robot_amo = eval(xml_to_amo(self.root))
+
+    def _determine_collision_type(self, mesh, collision_type):
+        """Determine the best collision primitive type for a given mesh.
+
+        Args:
+            mesh: Trimesh object
+            collision_type (str): User-specified collision type or 'auto'
+
+        Returns:
+            str: The collision type to use ('box', 'sphere', or 'capsule')
+        """
+        if collision_type != "auto":
+            return collision_type
+
+        # Auto-detection based on mesh properties
+        bounds = mesh.bounds
+        extents = bounds[1] - bounds[0]
+
+        # Calculate ratios to determine shape
+        ratios = np.sort(extents)
+        aspect_ratio_1 = ratios[1] / ratios[0] if ratios[0] > 0 else 1
+        aspect_ratio_2 = ratios[2] / ratios[1] if ratios[1] > 0 else 1
+
+        # If all dimensions are similar, use sphere
+        if aspect_ratio_1 < 1.5 and aspect_ratio_2 < 1.5:
+            return "sphere"
+        # If one dimension is much larger, use capsule
+        elif aspect_ratio_2 > 2.0:
+            return "capsule"
+        # Otherwise use box
+        else:
+            return "box"
+
+    def _create_collision_geometry(self, mesh, collision_type, scale_factor):
+        """Create a new collision geometry element based on mesh and type.
+
+        Args:
+            mesh: Trimesh object
+            collision_type (str): Type of collision primitive
+            scale_factor (float): Scale factor for the primitive
+
+        Returns:
+            ET.Element: New geometry element
+        """
+        bounds = mesh.bounds
+        extents = (bounds[1] - bounds[0]) * scale_factor
+
+        if collision_type == "box":
+            geometry_elem = ET.Element("box")
+            size_str = f"{extents[0]} {extents[1]} {extents[2]}"
+            geometry_elem.set("size", size_str)
+
+        elif collision_type == "sphere":
+            radius = np.max(extents) / 2
+            geometry_elem = ET.Element("sphere")
+            geometry_elem.set("radius", str(radius))
+
+        elif collision_type == "capsule":
+            # For capsule, use the longest dimension as height and average
+            # of others as radius
+            sorted_extents = np.sort(extents)
+            height = sorted_extents[2]
+            radius = np.mean(sorted_extents[:2]) / 2
+
+            geometry_elem = ET.Element("cylinder")
+            geometry_elem.set("radius", str(radius))
+            geometry_elem.set("length", str(height))
+
+        else:
+            raise ValueError(f"Unsupported collision type: {collision_type}")
+
+        return geometry_elem
+
 
 # %%
 
@@ -234,8 +412,10 @@ class URDFutils:
 # urdf_utils.modify_meshes(in_mesh_format=".STL", out_mesh_format=".obj")
 # # simplify meshes
 # # urdf_utils.simplify_meshes_except([])
-# # # now remove all collisions
+# # # now remove all collisions (optional)
 # urdf_utils.remove_collisions_except([])
+# # # OR add convex collisions based on visual meshes (recommended)
+# urdf_utils.add_convex_collisions(collision_type='auto', scale_factor=1.1)
 # # # add joint limits
 # urdf_utils.add_joint_limits()
 # # # add transmission tags
