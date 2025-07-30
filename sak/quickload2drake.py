@@ -67,10 +67,13 @@ def robot_joint_teleop(
     builder = DiagramBuilder()
     plant, scene_graph = pmp.AddMultibodyPlantSceneGraph(builder, time_step=time_step)
     parser = Parser(plant, scene_graph)
-    abs_path = Path(package_path).resolve().__str__()
-    parser.package_map().Add(package_name.split("/")[0], abs_path + "/" + package_name)
-    # parser.package_map().Add("meshes", abs_path + "/" + package_name + "meshes/")
-    print(package_name.split("/")[0])
+    if package_path is not None:
+        abs_path = Path(package_path).resolve().__str__()
+        parser.package_map().Add(
+            package_name.split("/")[0], abs_path + "/" + package_name
+        )
+        # parser.package_map().Add("meshes", abs_path + "/" + package_name + "meshes/")
+        print(package_name.split("/")[0])
 
     model = parser.AddModels(urdf_path)[0]
 
